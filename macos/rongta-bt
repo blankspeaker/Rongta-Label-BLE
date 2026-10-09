@@ -1,0 +1,78 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# CUPS backend for Rongta label printers over Bluetooth LE.
+# Device URI: rongta-bt://<name-prefix-or-uuid-or-auto>
+# Jobs are handed to the per-user helper on 127.0.0.1:47221.
+#
+# The client is rongta-ble. It connects, writes the request, and half-closes
+# so the helper sees the end of a PRINT body. A copy is installed beside this
+# script because CUPS executes this directory. The Application Support copy
+# is the fallback, and that directory is readable and executable from the
+# backend sandbox.
+
+here=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+if [ -n "${RONGTA_BLE:-}" ] && [ -x "$RONGTA_BLE" ]; then
+  CLIENT=$RONGTA_BLE
+elif [ -x "$here/rongta-ble" ]; then
+  CLIENT=$here/rongta-ble
+else
+  CLIENT="/Library/Application Support/com.blankspeaker.rongta-label/rongta-ble"
+fi
+
+if [ "$#" -eq 0 ]; then
+  printf '%s\n' 'direct rongta-bt://auto "Rongta Label Printer" "Any Rongta label printer over Bluetooth LE" "MFG:Rongta;CMD:ZPL,TSPL;CLS:PRINTER;"'
+  if [ -x "$CLIENT" ]; then
+    resp=$("$CLIENT" --scan-client 2>/dev/null) || true
+    printf '%s\n' "$resp" | while IFS=$(printf '\t') read -r tag uri name; do
+      if [ "$tag" = "DEV" ] && [ -n "$uri" ]; then
+        printf 'direct %s "Rongta %s" "Rongta Bluetooth LE" "MFG:Rongta;CLS:PRINTER;"\n' "$uri" "$name"
+      fi
+    done
+  fi
+  exit 0
+fi
+
+if [ "$#" -lt 5 ]; then
+  echo "ERROR: rongta-bt expected a CUPS job" >&2
+  exit 1
+fi
+
+if [ ! -x "$CLIENT" ]; then
+  echo "ERROR: Rongta Bluetooth helper failed (missing client)" >&2
+  exit 1
+fi
+
+uri=${DEVICE_URI:-rongta-bt://auto}
+job=${6:-}
+cleanup=""
+if [ -z "$job" ]; then
+  job=$(mktemp "${TMPDIR:-/tmp}/rongta-job.XXXXXX") || exit 1
+  cleanup=$job
+  cat > "$job" || {
+    rm -f "$job"
+    exit 1
+  }
+fi
+
+err=$(mktemp "${TMPDIR:-/tmp}/rongta-bt-err.XXXXXX") || {
+  rm -f "$cleanup"
+  exit 1
+}
+# A non-zero client status still leaves the helper's reply on stdout.
+resp=$("$CLIENT" --send "$uri" "$job" 2>"$err") || true
+rm -f "$cleanup"
+detail=$(tr '\n' ' ' < "$err" 2>/dev/null || true)
+rm -f "$err"
+case "$resp" in
+  OK*) exit 0 ;;
+esac
+msg=$(printf '%s' "$resp" | tr '\n' ' ')
+msg=$(printf '%s' "$msg" | sed 's/[[:space:]]*$//')
+if [ -z "$msg" ]; then
+  msg=$(printf '%s' "$detail" | sed 's/[[:space:]]*$//')
+fi
+case "$msg" in
+  ""|"no reply") msg="no reply; is the logged-in helper running?" ;;
+esac
+echo "ERROR: Rongta Bluetooth helper failed ($msg)" >&2
+exit 1

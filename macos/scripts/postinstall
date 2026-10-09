@@ -1,0 +1,70 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Fix ownership and start the Bluetooth helper for the console user.
+APP="/Library/Application Support/com.blankspeaker.rongta-label"
+AGENT="/Library/LaunchAgents/com.blankspeaker.rongta-label.plist"
+LABEL="com.blankspeaker.rongta-label"
+SETUP="/Applications/Rongta Label Setup.app"
+
+/usr/sbin/chown root:wheel \
+  /usr/libexec/cups/backend/rongta-bt \
+  /usr/libexec/cups/backend/rongta-ble \
+  /usr/libexec/cups/filter/rastertozpl-rt \
+  /usr/libexec/cups/filter/rastertotspl-rt \
+  "$APP/rongta-ble" \
+  "$APP/rongta-testprint" \
+  "$APP/edge-test.pdf" \
+  "$APP/edge-test.py" \
+  "$APP/uninstall.sh" \
+  "$AGENT" \
+  /Library/Printers/PPDs/Contents/Resources/Rongta_RP420_ZPL_203dpi.ppd \
+  /Library/Printers/PPDs/Contents/Resources/Rongta_RP421A_ZPL_203dpi.ppd \
+  /Library/Printers/PPDs/Contents/Resources/Rongta_RP422_TSPL_203dpi.ppd \
+  /Library/Printers/PPDs/Contents/Resources/Rongta_RP425_ZPL_203dpi.ppd \
+  /Library/Printers/PPDs/Contents/Resources/Rongta_ZPL_203dpi.ppd \
+  /Library/Printers/PPDs/Contents/Resources/Rongta_TSPL_203dpi.ppd
+
+/bin/chmod 755 \
+  /usr/libexec/cups/backend/rongta-bt \
+  /usr/libexec/cups/backend/rongta-ble \
+  /usr/libexec/cups/filter/rastertozpl-rt \
+  /usr/libexec/cups/filter/rastertotspl-rt \
+  "$APP/rongta-ble" \
+  "$APP/rongta-testprint" \
+  "$APP/uninstall.sh"
+/bin/chmod 644 "$APP/edge-test.pdf" "$APP/edge-test.py"
+if [ -d "$APP/edge-tests" ]; then
+  /usr/sbin/chown -R root:wheel "$APP/edge-tests"
+  /bin/chmod 755 "$APP/edge-tests"
+  /bin/chmod 644 "$APP/edge-tests"/*.pdf || true
+fi
+/bin/chmod 644 "$AGENT" /Library/Printers/PPDs/Contents/Resources/Rongta_*_203dpi.ppd
+
+# World-executable so CUPS runs the backend as the unprivileged lp user.
+# The backend only talks to the loopback helper.
+
+if /bin/launchctl print system/org.cups.cupsd >/dev/null 2>&1; then
+  /bin/launchctl kickstart -k system/org.cups.cupsd >/dev/null 2>&1 || true
+fi
+
+CU=$(/usr/bin/stat -f%Su /dev/console 2>/dev/null || true)
+U=""
+if [ -n "$CU" ] && [ "$CU" != "root" ] && [ "$CU" != "loginwindow" ]; then
+  U=$(/usr/bin/id -u "$CU" 2>/dev/null || true)
+  if [ -n "$U" ]; then
+    /bin/launchctl bootout "gui/$U/$LABEL" 2>/dev/null || true
+    /bin/launchctl bootstrap "gui/$U" "$AGENT" >/dev/null 2>&1 || true
+  fi
+fi
+
+if [ -d "$SETUP" ]; then
+  /usr/sbin/chown -R root:wheel "$SETUP"
+fi
+
+# Open the setup app on Add printer. It does not print by itself.
+if [ -n "$U" ] && [ -d "$SETUP" ]; then
+  /bin/launchctl asuser "$U" /usr/bin/open "$SETUP" >/dev/null 2>&1 || true
+fi
+
+echo "Rongta-Label-BLE installed."
+exit 0

@@ -1,0 +1,12 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Stop the helper so an upgrade can replace the binary.
+LABEL="com.blankspeaker.rongta-label"
+CU=$(/usr/bin/stat -f%Su /dev/console 2>/dev/null || true)
+if [ -n "$CU" ] && [ "$CU" != "root" ] && [ "$CU" != "loginwindow" ]; then
+  U=$(/usr/bin/id -u "$CU" 2>/dev/null || true)
+  if [ -n "$U" ]; then
+    /bin/launchctl bootout "gui/$U/$LABEL" 2>/dev/null || true
+  fi
+fi
+exit 0

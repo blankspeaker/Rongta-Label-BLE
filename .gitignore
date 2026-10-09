@@ -1,0 +1,10 @@
+uploads/
+build/
+dist/
+*.o
+*.dSYM/
+.DS_Store
+tests/scrub-patterns.local
+docs/PROVENANCE.md
+__pycache__/
+*.pyc

@@ -1,0 +1,91 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Print the edge-test page that matches the queue's current PageSize.
+#   rongta-testprint
+#   rongta-testprint QueueName
+set -eu
+
+APP="/Library/Application Support/com.blankspeaker.rongta-label"
+FALLBACK="$APP/edge-test.pdf"
+TESTS="$APP/edge-tests"
+
+is_rongta() {
+  q="$1"
+  ppd="/etc/cups/ppd/${q}.ppd"
+  if [ -f "$ppd" ] && grep -q 'rastertozpl-rt\|rastertotspl-rt' "$ppd" 2>/dev/null; then
+    return 0
+  fi
+  if lpstat -v 2>/dev/null | grep -F "device for ${q}:" | grep -q 'rongta-bt://'; then
+    return 0
+  fi
+  if lpstat -l -p "$q" 2>/dev/null | grep -q 'Rongta'; then
+    return 0
+  fi
+  return 1
+}
+
+queue="${1:-}"
+if [ -z "$queue" ]; then
+  for q in $(lpstat -p 2>/dev/null | awk '/^printer / {print $2}'); do
+    if is_rongta "$q"; then
+      queue="$q"
+      break
+    fi
+  done
+fi
+if [ -z "$queue" ]; then
+  echo "No Rongta queue. Usage: rongta-testprint [queue]" >&2
+  exit 1
+fi
+if [ ! -f "$FALLBACK" ]; then
+  echo "Missing $FALLBACK" >&2
+  exit 1
+fi
+
+page_size=""
+for token in $(lpoptions -p "$queue" 2>/dev/null || true); do
+  case "$token" in
+    PageSize=*) page_size=${token#PageSize=} ;;
+  esac
+done
+case "$page_size" in
+  *[!A-Za-z0-9.x]*|""|"."|".."|*..*) page_size="" ;;
+esac
+
+pdf="$FALLBACK"
+size="4x6in"
+tmp=""
+case "$page_size" in
+  Custom.*)
+    if command -v python3 >/dev/null 2>&1 && [ -f "$APP/edge-test.py" ]; then
+      tmp=$(mktemp "${TMPDIR:-/tmp}/rongta-edge.XXXXXX.pdf")
+      if python3 "$APP/edge-test.py" --page-size "$page_size" -o "$tmp"; then
+        pdf="$tmp"
+        size="$page_size"
+      else
+        echo "Could not build a custom test page; using the 4x6 test." >&2
+        rm -f "$tmp"
+        tmp=""
+      fi
+    else
+      echo "python3 is not available, so this custom size uses the 4x6 test." >&2
+    fi
+    ;;
+  "")
+    ;;
+  *)
+    if [ -f "$TESTS/${page_size}.pdf" ]; then
+      pdf="$TESTS/${page_size}.pdf"
+      size="$page_size"
+    else
+      echo "No test page for ${page_size}; using the 4x6 test." >&2
+    fi
+    ;;
+esac
+
+/usr/bin/lp -d "$queue" -o "PageSize=${size}" "$pdf"
+status=$?
+if [ -n "$tmp" ]; then
+  rm -f "$tmp"
+fi
+exit "$status"

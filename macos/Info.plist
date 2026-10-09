@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>com.blankspeaker.rongta-label</string>
+  <key>CFBundleName</key>
+  <string>Rongta Label Setup</string>
+  <key>CFBundleDisplayName</key>
+  <string>Rongta Label Setup</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.0.0</string>
+  <key>CFBundleVersion</key>
+  <string>1.0.0</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>11.0</string>
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>Finds your Rongta label printer and sends print jobs over Bluetooth.</string>
+  <key>NSBluetoothPeripheralUsageDescription</key>
+  <string>Finds your Rongta label printer and sends print jobs over Bluetooth.</string>
+</dict>
+</plist>
